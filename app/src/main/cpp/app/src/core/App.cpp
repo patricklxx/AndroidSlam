@@ -107,6 +107,9 @@ namespace android_slam
         // Use GPU shader to trans YUV to RGB.
         {
             std::vector<uint8_t> img = m_image_pool->getImage();
+            //todo image-cv::Mat
+
+
             Shader debug_shader("shader/yuv2rgb.vert", "shader/debug_texture.frag");
             Plane2D debug_plane;
             ImageTexture debug_texture(k_sensor_camera_width, k_sensor_camera_height, img);
