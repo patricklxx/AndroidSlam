@@ -13,4 +13,8 @@ project("AndroidSlam")
 
     message("[Android Slam CMake Info] Current app is compiled with ABI Type: <${CMAKE_ANDROID_ARCH_ABI}>")
 
+    set(OpenCV_STATIC OFF)
+    set(OpenCV_DIR "./external/OpenCV-android-sdk/sdk/native/jni")
+    find_package(OpenCV 4 REQUIRED)
+
     add_subdirectory(./app)

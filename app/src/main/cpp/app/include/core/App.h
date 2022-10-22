@@ -10,6 +10,7 @@
 
 #include "render/ImagePool.h"
 
+#include <opencv2/opencv.hpp>
 namespace android_slam
 {
 
@@ -52,6 +53,13 @@ namespace android_slam
     public:
         bool m_running = true;
         bool m_active = false;
+
+    public:
+        //标定参数
+        std::vector<std::vector<cv::Point3f>> objpoints;
+        std::vector<std::vector<cv::Point2f>> imgpoints;
+
+
     };
 
 }

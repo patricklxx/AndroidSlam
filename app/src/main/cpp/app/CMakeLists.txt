@@ -23,6 +23,7 @@ project(android_slam)
     target_include_directories(${PROJECT_NAME}
         PRIVATE ./include
         PRIVATE ${GLM_INCLUDE_DIRS}
+        PUBLIC ${OpenCV_INCLUDE_DIRS}
     )
     target_link_libraries(${PROJECT_NAME}
         -landroid
@@ -33,6 +34,8 @@ project(android_slam)
         mediandk
         EGL
         GLESv3
+        ${OpenCV_LIBS}
+
     )
     target_compile_definitions(${PROJECT_NAME}
         PRIVATE -DLOG

@@ -2,6 +2,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <sstream>
 
 #include "utils/Log.h"
 #include "utils/AssetManager.h"
@@ -9,6 +10,11 @@
 #include "render/ImageTexture.h"
 #include "render/Shader.h"
 #include "render/Plane2D.h"
+
+#include <opencv2/opencv.hpp>
+#include <opencv2/calib3d.hpp>
+
+int CHECKERBOARD[2]{6,9};
 
 namespace android_slam
 {
@@ -59,6 +65,7 @@ namespace android_slam
                 std::this_thread::sleep_for(Timer::Duration(k_min_frame_time_second - dt));
                 dt = k_min_frame_time_second;
             }
+
             update(dt);
         }
     }
@@ -107,12 +114,93 @@ namespace android_slam
         // Use GPU shader to trans YUV to RGB.
         {
             std::vector<uint8_t> img = m_image_pool->getImage();
-            //todo image-cv::Mat
+            //vector img to cv::Mat
+            cv::Mat cv_img(k_sensor_camera_height,k_sensor_camera_width, CV_8UC3);
+            memcpy(cv_img.data, img.data(), sizeof(uint8_t) * img.size());
 
+            //horizontal and vertical flip
+            //cv::Mat hv_flip;
+            //cv::flip(cv_img, hv_flip, -1);
+
+            //标定
+            {
+                std::vector<cv::Point3f> obj;
+                std::vector<cv::Point2f> corner_pts;
+                bool success;
+                //定义世界坐标obj
+                //obj.clear();
+                for (int i{ 0 }; i < CHECKERBOARD[1]; i++)
+                {
+                    for (int j{ 0 }; j < CHECKERBOARD[0]; j++)
+                    {
+                        obj.push_back(cv::Point3f(j, i, 0));
+                    }
+                }
+                cv::Mat gray;
+                cv::cvtColor(cv_img,gray,cv::COLOR_BGR2GRAY);
+                success=cv::findChessboardCorners(gray,cv::Size(CHECKERBOARD[0],CHECKERBOARD[1]),
+                                                  corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
+                if(success)
+                {
+                    cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::Type::MAX_ITER, 30, 0.001);
+
+                    // 为给定的二维点细化像素坐标
+                    cv::cornerSubPix(gray, corner_pts, cv::Size(11, 11), cv::Size(-1, -1), criteria);
+
+                    // 在棋盘上显示检测到的角点
+                    cv::drawChessboardCorners(cv_img, cv::Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, success);
+
+                    objpoints.push_back(obj);
+                    imgpoints.push_back(corner_pts);
+                }
+
+                DEBUG_INFO("%lld", imgpoints.size());
+                DEBUG_INFO("%lld", objpoints.size());
+                if(imgpoints.size()>25)
+                {
+                    cv::Mat cameraMatrix, distCoeffs, R, T;
+                    double rms = cv::calibrateCamera(objpoints, imgpoints, cv::Size(gray.rows, gray.cols), cameraMatrix, distCoeffs, R, T,0);
+                    objpoints.clear();
+                    imgpoints.clear();
+
+                    /*
+                    std::ostringstream oss;
+                    for(int i = 0; i < 3; ++i)
+                    {
+                        for(int j = 0; j < 3; ++j)
+                        {
+                            oss << cameraMatrix.at<float>(i, j) << ' ';
+                        }
+                        oss << '\n';
+                    }
+
+                    auto str = oss.str();
+                    DEBUG_INFO("Matrix = %s", str.c_str());
+                     */
+                    DEBUG_INFO("RMS == %.3f", rms);
+                    DEBUG_INFO(" Matrix_rows = %d", cameraMatrix.rows);
+                    DEBUG_INFO(" Matrix_cols = %d", cameraMatrix.cols);
+                    for(int i = 0; i < 3; i++)
+                    {
+                        for(int j = 0; j < 3; j++)
+                        {
+                            DEBUG_INFO("%.3f ", cameraMatrix.at<float>(i, j));
+                        }
+                        DEBUG_INFO("\n");
+                    }
+                }
+            }
+
+
+
+            //cv::Mat to vector new_img
+            std::vector<uint8_t> new_img = cv_img.reshape(1,1);
+
+            glViewport(0, 0, 1280, 960);
 
             Shader debug_shader("shader/yuv2rgb.vert", "shader/debug_texture.frag");
             Plane2D debug_plane;
-            ImageTexture debug_texture(k_sensor_camera_width, k_sensor_camera_height, img);
+            ImageTexture debug_texture(k_sensor_camera_width, k_sensor_camera_height, new_img);
 
             debug_plane.bind();
             debug_shader.bind();
