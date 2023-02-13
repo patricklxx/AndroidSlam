@@ -22,6 +22,8 @@ namespace android_slam
         );
         Image first_image = m_image_pool->getImage();
 
+        m_imu_pool = std::make_unique<SensorIMU>();
+
         m_slam_renderer = std::make_unique<SlamRenderer>(
         k_fps_camera_fov, m_app_ref.getWindow().getAspectRatio(), k_fps_camera_z_min, k_fps_camera_z_max
         );
@@ -52,20 +54,23 @@ namespace android_slam
         m_slam_thread = std::make_unique<std::thread>(
         [this]()
         {
+            std::vector<Image>    images;
+            std::vector<ImuPoint> imu_points;
+
             while (m_is_running_slam)
             {
-                if (m_slam_has_new_image)
+                if (m_slam_has_new_data)
                 {
                     // Acquire new images.
-                    std::vector<Image> images;
                     {
                         std::unique_lock<std::mutex> lock(m_image_mutex);
                         images = std::move(m_images);
+                        imu_points = std::move(m_imu_points);
                     }
 
                     // Call slam tracking function.
-                    auto res = m_slam_kernel->handleData(images, {});
-                    m_slam_has_new_image = false; // This image is processed and this thread needs new image.
+                    auto res = m_slam_kernel->handleData(images, imu_points);
+                    m_slam_has_new_data = false; // This image is processed and this thread needs new image.
 
                     // Synchronize tracking result to main thread, move the data because this thread doesn't need it.
                     {
@@ -97,12 +102,22 @@ namespace android_slam
         {
             // Slam handling.
             std::vector<Image> images;
+            {
+                images.push_back(m_image_pool->getImage());
+
+                std::unique_lock<std::mutex> lock(m_image_mutex);
+                m_images = images;
+                m_imu_points = m_imu_pool->getImuData();
+            }
+            m_slam_has_new_data = true;
+            /*
             images.push_back(m_image_pool->getImage());
             {
                 std::unique_lock<std::mutex> lock(m_image_mutex);
                 m_images = images;
             }
             m_slam_has_new_image = true;
+             */
 
             TrackingResult tracking_res;
             {
