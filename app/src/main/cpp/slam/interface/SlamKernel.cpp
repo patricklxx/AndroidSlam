@@ -20,7 +20,8 @@ namespace android_slam
     , m_last_time(std::chrono::steady_clock::now())
     {
         ORB_SLAM3::Settings::SettingDesc desc{};
-        desc.sensor = ORB_SLAM3::System::eSensor::MONOCULAR;
+        //desc.sensor = ORB_SLAM3::System::eSensor::MONOCULAR;
+        desc.sensor = ORB_SLAM3::System::eSensor::IMU_MONOCULAR;
         desc.cameraInfo.cameraType = ORB_SLAM3::Settings::CameraType::PinHole;
         desc.cameraInfo.fx = 458.654f;
         desc.cameraInfo.fy = 457.296f;
@@ -90,14 +91,25 @@ namespace android_slam
         cv::Mat cv_image(m_height, m_width, CV_8UC3);
         memcpy(cv_image.data, image.data.data(), sizeof(uint8_t) * image.data.size());
 
+        //Convert imu data
+        std::vector<ORB_SLAM3::IMU::Point>orb_imus;
+        orb_imus.reserve(imus.size());
+        for(auto[ax,ay,az,wx,wy,wz,ts]:imus)
+        {
+            double relative_time_stamp = (double)(ts - m_begin_time_stamp) *k_nano_sec_to_sec_radio;
+            orb_imus.emplace_back(ax,ay,az,wx,wy,wz,relative_time_stamp);
+        }
 
+        //Get time stamp from android time stamp
         double image_time_stamp = (double) (image.time_stamp - m_begin_time_stamp) * k_nano_sec_to_sec_radio;
-        Sophus::SE3f pose = m_orb_slam->TrackMonocular(cv_image, image_time_stamp);
+        //Tracking
+        Sophus::SE3f pose = m_orb_slam->TrackMonocular(cv_image, image_time_stamp,orb_imus);
 
 
-        Eigen::Matrix4f mat_pose = pose.matrix();
         TrackingResult res;
         {
+            Eigen::Matrix4f mat_pose = pose.matrix();
+
             res.last_pose[+0] = mat_pose(0, 0);
             res.last_pose[+1] = mat_pose(1, 0);
             res.last_pose[+2] = mat_pose(2, 0);
