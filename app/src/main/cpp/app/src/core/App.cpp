@@ -118,9 +118,40 @@ namespace android_slam
             cv::Mat cv_img(k_sensor_camera_height,k_sensor_camera_width, CV_8UC3);
             memcpy(cv_img.data, img.data(), sizeof(uint8_t) * img.size());
 
-            //horizontal and vertical flip
-            //cv::Mat hv_flip;
-            //cv::flip(cv_img, hv_flip, -1);
+            //水平翻转
+            cv::Mat hv_flip;
+            cv::flip(cv_img, hv_flip, 0);
+
+            //旋转45度
+            {
+                cv::Mat M;
+                cv::Mat rot_dst;
+                M = cv::getRotationMatrix2D(cv::Point(k_sensor_camera_width/2,k_sensor_camera_height/2),45,1);
+                cv::warpAffine(cv_img,rot_dst,M,cv_img.size());
+            }
+
+            //仿射变换
+            cv::Mat warp_dst;
+            cv::Mat warp_mat(2, 3, CV_32FC1);
+            {
+                cv::Point2f srcTri[3];
+                cv::Point2f dstTri[3];
+
+                // 设置源图像和目标图像上的三组点以计算仿射变换
+                srcTri[0] = cv::Point2f(0, 0);
+                srcTri[1] = cv::Point2f(cv_img.cols - 1, 0);
+                srcTri[2] = cv::Point2f(0, cv_img.rows - 1);
+                for (size_t i = 0; i < 3; i++){
+                    circle(cv_img, srcTri[i], 2, cv::Scalar(0, 0, 255), 5, 8);
+                }
+
+                dstTri[0] = cv::Point2f(cv_img.cols * 0.0, cv_img.rows * 0.13);
+                dstTri[1] = cv::Point2f(cv_img.cols * 0.95, cv_img.rows * 0.15);
+                dstTri[2] = cv::Point2f(cv_img.cols * 0.15, cv_img.rows * 0.9);
+
+                warp_mat = getAffineTransform(srcTri, dstTri);
+                warpAffine(cv_img, warp_dst, warp_mat, warp_dst.size());
+            }
 
             //标定
             {
@@ -163,20 +194,6 @@ namespace android_slam
                     objpoints.clear();
                     imgpoints.clear();
 
-                    /*
-                    std::ostringstream oss;
-                    for(int i = 0; i < 3; ++i)
-                    {
-                        for(int j = 0; j < 3; ++j)
-                        {
-                            oss << cameraMatrix.at<float>(i, j) << ' ';
-                        }
-                        oss << '\n';
-                    }
-
-                    auto str = oss.str();
-                    DEBUG_INFO("Matrix = %s", str.c_str());
-                     */
                     DEBUG_INFO("RMS == %.3f", rms);
                     DEBUG_INFO(" Matrix_rows = %d", cameraMatrix.rows);
                     DEBUG_INFO(" Matrix_cols = %d", cameraMatrix.cols);
@@ -188,9 +205,21 @@ namespace android_slam
                         }
                         DEBUG_INFO("\n");
                     }
+
+                    //std::ostringstream oss;
+                    //for(int i = 0; i < 3; ++i)
+                    //{
+                    //    for(int j = 0; j < 3; ++j)
+                    //    {
+                    //        oss << cameraMatrix.at<float>(i, j) << ' ';
+                    //    }
+                    //    oss << '\n';
+                    //}
+
+                    //auto str = oss.str();
+                    //DEBUG_INFO("Matrix = %s", str.c_str());
                 }
             }
-
 
 
             //cv::Mat to vector new_img
